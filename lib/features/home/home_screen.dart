@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../player/now_playing_screen.dart';
 import '../../core/theme/app_theme.dart';
+import '../../services/audio/audio_player_service.dart';
+import '../../services/supabase/supabase_service.dart';
+import '../../core/widgets/mini_player.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -13,20 +17,15 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
 
-  final List<Map<String, String>> recentlyPlayed = [
-    {
-      'title': 'Nairobi Nights',
-      'artist': 'Dobapp Selects',
-    },
-    {
-      'title': 'Mtaa Vibes',
-      'artist': 'Kenya Sounds',
-    },
-    {
-      'title': 'Midnight Matatu',
-      'artist': 'Doba Sessions',
-    },
-  ];
+  static const String _migosTrackUrl =
+      'https://uuvjbzhgwgunapwewami.supabase.co/storage/v1/object/public/music/Tracks/Migos%20-%20Bad%20and%20Boujee%20ft.%20Lil%20Uzi%20Vert%20-%20(256%20Kbps).mp3';
+
+  bool _isLoadingTracks = true;
+  String? _tracksError;
+  List<Map<String, dynamic>> _tracks = [];
+  String? _currentTitle;
+String? _currentArtist;
+String? _currentCoverUrl;
 
   final List<Map<String, String>> trending = [
     {
@@ -44,6 +43,74 @@ class _HomeScreenState extends State<HomeScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _loadTracks();
+  }
+
+  Future<void> _loadTracks() async {
+    try {
+      final tracks = await SupabaseService.getTracks();
+
+      if (!mounted) return;
+
+      setState(() {
+        _tracks = tracks;
+        _isLoadingTracks = false;
+        _tracksError = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _isLoadingTracks = false;
+        _tracksError = error.toString();
+      });
+    }
+  }
+
+  Future<void> _playTrack(
+  String url, {
+  String title = 'Bad and Boujee',
+  String artist = 'Migos',
+  String? coverUrl,
+}) async {
+  try {
+    await AudioPlayerService.play(url);
+
+    if (!mounted) return;
+
+    setState(() {
+      _currentTitle = title;
+      _currentArtist = artist;
+      _currentCoverUrl = coverUrl;
+    });
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => NowPlayingScreen(
+          title: title,
+          artist: artist,
+          coverUrl: coverUrl,
+        ),
+      ),
+    );
+  } catch (error) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Could not play this track.',
+          style: GoogleFonts.montserrat(),
+        ),
+      ),
+    );
+  }
+}
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -59,76 +126,275 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: _buildBottomNavigation(),
+      bottomNavigationBar: Column(
+  mainAxisSize: MainAxisSize.min,
+  children: [
+    if (_currentTitle != null)
+      MiniPlayer(
+        title: _currentTitle!,
+        artist: _currentArtist ?? 'Unknown Artist',
+        coverUrl: _currentCoverUrl,
+      ),
+    _buildBottomNavigation(),
+  ],
+),
     );
   }
 
   Widget _buildHome() {
-    return CustomScrollView(
-      physics: const BouncingScrollPhysics(),
-      slivers: [
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-          sliver: SliverToBoxAdapter(
-            child: _buildHeader(),
-          ),
+    return RefreshIndicator(
+      onRefresh: _loadTracks,
+      color: AppTheme.primary,
+      backgroundColor: AppTheme.surface,
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
         ),
-
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 28, 20, 0),
-          sliver: SliverToBoxAdapter(
-            child: _buildGreeting(),
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+            sliver: SliverToBoxAdapter(
+              child: _buildHeader(),
+            ),
           ),
-        ),
-
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 22, 20, 0),
-          sliver: SliverToBoxAdapter(
-            child: _buildFeaturedCard(),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 28, 20, 0),
+            sliver: SliverToBoxAdapter(
+              child: _buildGreeting(),
+            ),
           ),
-        ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 22, 20, 0),
+            sliver: SliverToBoxAdapter(
+              child: _buildFeaturedCard(),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 32, 20, 0),
+            sliver: SliverToBoxAdapter(
+              child: _buildSectionTitle(
+                'Recently played',
+                'See all',
+              ),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.only(top: 14),
+            sliver: SliverToBoxAdapter(
+              child: _buildDatabaseSongs(),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 32, 20, 0),
+            sliver: SliverToBoxAdapter(
+              child: _buildSectionTitle(
+                'Trending in Nairobi',
+                'Explore',
+              ),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.only(top: 14),
+            sliver: SliverToBoxAdapter(
+              child: _buildHorizontalSongs(trending),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 32, 20, 30),
+            sliver: SliverToBoxAdapter(
+              child: _buildDobaBanner(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 32, 20, 0),
-          sliver: SliverToBoxAdapter(
-            child: _buildSectionTitle(
-              'Recently played',
-              'See all',
+  Widget _buildDatabaseSongs() {
+    if (_isLoadingTracks) {
+      return const SizedBox(
+        height: 185,
+        child: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    if (_tracksError != null) {
+      return SizedBox(
+        height: 185,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 30),
+            child: Text(
+              'Could not load music.\nPull down to try again.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.montserrat(
+                color: AppTheme.textSecondary,
+                fontSize: 12,
+              ),
             ),
           ),
         ),
+      );
+    }
 
-        SliverPadding(
-          padding: const EdgeInsets.only(top: 14),
-          sliver: SliverToBoxAdapter(
-            child: _buildHorizontalSongs(recentlyPlayed),
-          ),
-        ),
-
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 32, 20, 0),
-          sliver: SliverToBoxAdapter(
-            child: _buildSectionTitle(
-              'Trending in Nairobi',
-              'Explore',
+    if (_tracks.isEmpty) {
+      return SizedBox(
+        height: 185,
+        child: Center(
+          child: Text(
+            'No music available yet.',
+            style: GoogleFonts.montserrat(
+              color: AppTheme.textSecondary,
+              fontSize: 12,
             ),
           ),
         ),
+      );
+    }
 
-        SliverPadding(
-          padding: const EdgeInsets.only(top: 14),
-          sliver: SliverToBoxAdapter(
-            child: _buildHorizontalSongs(trending),
-          ),
-        ),
+    return SizedBox(
+      height: 185,
+      child: ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        itemCount: _tracks.length,
+        separatorBuilder: (_, index) => const SizedBox(width: 14),
+        itemBuilder: (context, index) {
+          return _buildDatabaseSongCard(_tracks[index]);
+        },
+      ),
+    );
+  }
 
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 32, 20, 30),
-          sliver: SliverToBoxAdapter(
-            child: _buildDobaBanner(),
-          ),
+  Widget _buildDatabaseSongCard(Map<String, dynamic> track) {
+    final title = track['title']?.toString() ?? 'Unknown track';
+    final artist = 'Migos';
+    final coverUrl = track['cover_url']?.toString();
+    final audioUrl = track['audio_url']?.toString();
+
+    return SizedBox(
+      width: 140,
+      child: GestureDetector(
+        onTap: () {
+          if (audioUrl != null && audioUrl.isNotEmpty) {
+            _playTrack(
+              audioUrl,
+              title: title,
+              artist: artist,
+              coverUrl: coverUrl,
+            );
+          }
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 140,
+              height: 140,
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                color: AppTheme.surface,
+              ),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (coverUrl != null && coverUrl.isNotEmpty)
+                    Image.network(
+                      coverUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (
+                        context,
+                        error,
+                        stackTrace,
+                      ) {
+                        return _buildArtworkPlaceholder();
+                      },
+                    )
+                  else
+                    _buildArtworkPlaceholder(),
+
+                  Positioned(
+                    right: 9,
+                    bottom: 9,
+                    child: GestureDetector(
+                      onTap: () {
+                        if (audioUrl != null && audioUrl.isNotEmpty) {
+                          _playTrack(
+                            audioUrl,
+                            title: title,
+                            artist: artist,
+                            coverUrl: coverUrl,
+                          );
+                        }
+                      },
+                      child: Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.78),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.play_arrow_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 9),
+            Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.montserrat(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              artist,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.montserrat(
+                color: AppTheme.textSecondary,
+                fontSize: 10,
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
+    );
+  }
+
+  Widget _buildArtworkPlaceholder() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.primary.withValues(alpha: 0.35),
+            const Color(0xFF15151D),
+          ],
+        ),
+      ),
+      child: Center(
+        child: Icon(
+          Icons.music_note_rounded,
+          color: Colors.white.withValues(alpha: 0.75),
+          size: 46,
+        ),
+      ),
     );
   }
 
@@ -151,9 +417,7 @@ class _HomeScreenState extends State<HomeScreen> {
             size: 22,
           ),
         ),
-
         const SizedBox(width: 12),
-
         Expanded(
           child: Text(
             'DOBAPLAY',
@@ -164,14 +428,11 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
-
         _iconButton(
           Icons.notifications_none_rounded,
           () {},
         ),
-
         const SizedBox(width: 8),
-
         _iconButton(
           Icons.search_rounded,
           () {
@@ -243,13 +504,11 @@ class _HomeScreenState extends State<HomeScreen> {
             top: -40,
             child: _graffitiCircle(150),
           ),
-
           Positioned(
             right: 25,
             bottom: -35,
             child: _graffitiCircle(90),
           ),
-
           Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
@@ -274,9 +533,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                 ),
-
                 const Spacer(),
-
                 Text(
                   'Nairobi After Dark',
                   style: GoogleFonts.montserrat(
@@ -285,9 +542,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-
                 const SizedBox(height: 5),
-
                 Text(
                   'Late night sounds from the city.',
                   style: GoogleFonts.montserrat(
@@ -295,11 +550,17 @@ class _HomeScreenState extends State<HomeScreen> {
                     fontSize: 11,
                   ),
                 ),
-
                 const SizedBox(height: 14),
-
                 GestureDetector(
-                  onTap: () {},
+                  onTap: () {
+                    _playTrack(
+                      _migosTrackUrl,
+                      title: 'Bad and Boujee',
+                      artist: 'Migos',
+                      coverUrl:
+                          'https://uuvjbzhgwgunapwewami.supabase.co/storage/v1/object/public/covers/artworks-000179057945-14v79p-t500x500.jpg',
+                    );
+                  },
                   child: Container(
                     width: 48,
                     height: 48,
@@ -360,7 +621,7 @@ class _HomeScreenState extends State<HomeScreen> {
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
         itemCount: songs.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 14),
+        separatorBuilder: (_, index) => const SizedBox(width: 14),
         itemBuilder: (context, index) {
           final song = songs[index];
 
@@ -414,9 +675,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 9),
-
                   Text(
                     song['title']!,
                     maxLines: 1,
@@ -427,9 +686,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-
                   const SizedBox(height: 3),
-
                   Text(
                     song['artist']!,
                     maxLines: 1,
@@ -473,9 +730,7 @@ class _HomeScreenState extends State<HomeScreen> {
               size: 26,
             ),
           ),
-
           const SizedBox(width: 15),
-
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
