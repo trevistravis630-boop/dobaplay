@@ -6,6 +6,10 @@ import '../../core/theme/app_theme.dart';
 import '../../services/audio/audio_player_service.dart';
 import '../../services/supabase/supabase_service.dart';
 import '../../core/widgets/mini_player.dart';
+import '../search/search_screen.dart';
+import '../library/library_screen.dart';
+import '../downloads/downloads_screen.dart';
+import '../profile/profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -119,10 +123,10 @@ String? _currentCoverUrl;
           index: _currentIndex,
           children: [
             _buildHome(),
-            _buildPlaceholder('Search'),
-            _buildPlaceholder('Your Library'),
-            _buildPlaceholder('Downloads'),
-            _buildPlaceholder('Profile'),
+            const SearchScreen(),
+            const LibraryScreen(),
+            const DownloadsScreen(),
+            const ProfileScreen(),
           ],
         ),
       ),
