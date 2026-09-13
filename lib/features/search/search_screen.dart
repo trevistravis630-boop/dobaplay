@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-
 import '../../core/theme/app_theme.dart';
 import '../../services/audio/audio_player_service.dart';
 import '../../services/supabase/supabase_service.dart';
@@ -22,6 +21,7 @@ class _SearchScreenState extends State<SearchScreen> {
   List<Map<String, dynamic>> _results = [];
 
   bool _isSearching = false;
+
   String? _error;
 
   final List<String> _trending = [
@@ -78,13 +78,17 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
-  Future<void> _playTrack(Map<String, dynamic> track) async {
+  Future<void> _playTrack(
+    Map<String, dynamic> track,
+  ) async {
     final audioUrl = track['audio_url']?.toString();
 
     if (audioUrl == null || audioUrl.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Audio is not available for this track.'),
+          content: Text(
+            'Audio is not available for this track.',
+          ),
         ),
       );
       return;
@@ -93,7 +97,13 @@ class _SearchScreenState extends State<SearchScreen> {
     final title =
         track['title']?.toString() ?? 'Unknown track';
 
-    const artist = 'Migos';
+    // Get the artist from the Supabase relationship.
+    final artistData = track['artists'];
+
+    final artist = artistData is Map
+        ? (artistData['name']?.toString() ??
+            'Unknown Artist')
+        : 'Unknown Artist';
 
     final coverUrl =
         track['cover_url']?.toString();
@@ -118,7 +128,9 @@ class _SearchScreenState extends State<SearchScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Could not play this track.'),
+          content: Text(
+            'Could not play this track.',
+          ),
         ),
       );
     }
@@ -143,7 +155,6 @@ class _SearchScreenState extends State<SearchScreen> {
                 child: _buildHeader(),
               ),
             ),
-
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(
                 20,
@@ -155,7 +166,6 @@ class _SearchScreenState extends State<SearchScreen> {
                 child: _buildSearchBar(),
               ),
             ),
-
             if (_searchController.text.trim().isEmpty) ...[
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(
@@ -168,7 +178,6 @@ class _SearchScreenState extends State<SearchScreen> {
                   child: _buildTrending(),
                 ),
               ),
-
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(
                   20,
@@ -200,10 +209,8 @@ class _SearchScreenState extends State<SearchScreen> {
                   ),
                 ),
               ),
-
               _buildResults(),
             ],
-
             const SliverToBoxAdapter(
               child: SizedBox(height: 30),
             ),
@@ -297,7 +304,7 @@ class _SearchScreenState extends State<SearchScreen> {
       children: [
         Row(
           children: [
-            Icon(
+            const Icon(
               Icons.local_fire_department_rounded,
               color: AppTheme.primary,
               size: 20,
@@ -487,6 +494,14 @@ class _SearchScreenState extends State<SearchScreen> {
     final coverUrl =
         track['cover_url']?.toString();
 
+    // Get the artist from Supabase.
+    final artistData = track['artists'];
+
+    final artist = artistData is Map
+        ? (artistData['name']?.toString() ??
+            'Unknown Artist')
+        : 'Unknown Artist';
+
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: 20,
@@ -518,9 +533,7 @@ class _SearchScreenState extends State<SearchScreen> {
                       )
                     : _artworkPlaceholder(),
               ),
-
               const SizedBox(width: 13),
-
               Expanded(
                 child: Column(
                   crossAxisAlignment:
@@ -538,7 +551,9 @@ class _SearchScreenState extends State<SearchScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Migos',
+                      artist,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.montserrat(
                         color: AppTheme.textSecondary,
                         fontSize: 10,
@@ -547,11 +562,10 @@ class _SearchScreenState extends State<SearchScreen> {
                   ],
                 ),
               ),
-
               Container(
                 width: 38,
                 height: 38,
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   color: AppTheme.primary,
                   shape: BoxShape.circle,
                 ),

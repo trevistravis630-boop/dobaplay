@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../player/now_playing_screen.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/mini_player.dart';
 import '../../services/audio/audio_player_service.dart';
 import '../../services/supabase/supabase_service.dart';
-import '../../core/widgets/mini_player.dart';
-import '../search/search_screen.dart';
-import '../library/library_screen.dart';
 import '../downloads/downloads_screen.dart';
+import '../library/library_screen.dart';
+import '../player/now_playing_screen.dart';
 import '../profile/profile_screen.dart';
+import '../search/search_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -21,15 +21,13 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
 
-  static const String _migosTrackUrl =
-      'https://uuvjbzhgwgunapwewami.supabase.co/storage/v1/object/public/music/Tracks/Migos%20-%20Bad%20and%20Boujee%20ft.%20Lil%20Uzi%20Vert%20-%20(256%20Kbps).mp3';
-
   bool _isLoadingTracks = true;
   String? _tracksError;
   List<Map<String, dynamic>> _tracks = [];
+
   String? _currentTitle;
-String? _currentArtist;
-String? _currentCoverUrl;
+  String? _currentArtist;
+  String? _currentCoverUrl;
 
   final List<Map<String, String>> trending = [
     {
@@ -74,45 +72,55 @@ String? _currentCoverUrl;
   }
 
   Future<void> _playTrack(
-  String url, {
-  String title = 'Bad and Boujee',
-  String artist = 'Migos',
-  String? coverUrl,
-}) async {
-  try {
-    await AudioPlayerService.play(url);
+    String url, {
+    required String title,
+    required String artist,
+    String? coverUrl,
+  }) async {
+    try {
+      await AudioPlayerService.play(url);
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    setState(() {
-      _currentTitle = title;
-      _currentArtist = artist;
-      _currentCoverUrl = coverUrl;
-    });
+      setState(() {
+        _currentTitle = title;
+        _currentArtist = artist;
+        _currentCoverUrl = coverUrl;
+      });
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => NowPlayingScreen(
-          title: title,
-          artist: artist,
-          coverUrl: coverUrl,
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => NowPlayingScreen(
+            title: title,
+            artist: artist,
+            coverUrl: coverUrl,
+          ),
         ),
-      ),
-    );
-  } catch (error) {
-    if (!mounted) return;
+      );
+    } catch (error) {
+      if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Could not play this track.',
-          style: GoogleFonts.montserrat(),
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not play this track.',
+            style: GoogleFonts.montserrat(),
+          ),
         ),
-      ),
-    );
+      );
+    }
   }
-}
+
+  String _getArtistName(Map<String, dynamic> track) {
+    final artistData = track['artists'];
+
+    if (artistData is Map) {
+      return artistData['name']?.toString() ?? 'Unknown Artist';
+    }
+
+    return 'Unknown Artist';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -131,17 +139,17 @@ String? _currentCoverUrl;
         ),
       ),
       bottomNavigationBar: Column(
-  mainAxisSize: MainAxisSize.min,
-  children: [
-    if (_currentTitle != null)
-      MiniPlayer(
-        title: _currentTitle!,
-        artist: _currentArtist ?? 'Unknown Artist',
-        coverUrl: _currentCoverUrl,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_currentTitle != null)
+            MiniPlayer(
+              title: _currentTitle!,
+              artist: _currentArtist ?? 'Unknown Artist',
+              coverUrl: _currentCoverUrl,
+            ),
+          _buildBottomNavigation(),
+        ],
       ),
-    _buildBottomNavigation(),
-  ],
-),
     );
   }
 
@@ -265,7 +273,8 @@ String? _currentCoverUrl;
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
         itemCount: _tracks.length,
-        separatorBuilder: (_, index) => const SizedBox(width: 14),
+        separatorBuilder: (_, index) =>
+            const SizedBox(width: 14),
         itemBuilder: (context, index) {
           return _buildDatabaseSongCard(_tracks[index]);
         },
@@ -273,11 +282,19 @@ String? _currentCoverUrl;
     );
   }
 
-  Widget _buildDatabaseSongCard(Map<String, dynamic> track) {
-    final title = track['title']?.toString() ?? 'Unknown track';
-    final artist = 'Migos';
-    final coverUrl = track['cover_url']?.toString();
-    final audioUrl = track['audio_url']?.toString();
+  Widget _buildDatabaseSongCard(
+    Map<String, dynamic> track,
+  ) {
+    final title =
+        track['title']?.toString() ?? 'Unknown track';
+
+    final artist = _getArtistName(track);
+
+    final coverUrl =
+        track['cover_url']?.toString();
+
+    final audioUrl =
+        track['audio_url']?.toString();
 
     return SizedBox(
       width: 140,
@@ -306,27 +323,25 @@ String? _currentCoverUrl;
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  if (coverUrl != null && coverUrl.isNotEmpty)
+                  if (coverUrl != null &&
+                      coverUrl.isNotEmpty)
                     Image.network(
                       coverUrl,
                       fit: BoxFit.cover,
-                      errorBuilder: (
-                        context,
-                        error,
-                        stackTrace,
-                      ) {
+                      errorBuilder:
+                          (context, error, stackTrace) {
                         return _buildArtworkPlaceholder();
                       },
                     )
                   else
                     _buildArtworkPlaceholder(),
-
                   Positioned(
                     right: 9,
                     bottom: 9,
                     child: GestureDetector(
                       onTap: () {
-                        if (audioUrl != null && audioUrl.isNotEmpty) {
+                        if (audioUrl != null &&
+                            audioUrl.isNotEmpty) {
                           _playTrack(
                             audioUrl,
                             title: title,
@@ -339,7 +354,9 @@ String? _currentCoverUrl;
                         width: 34,
                         height: 34,
                         decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.78),
+                          color: Colors.black.withValues(
+                            alpha: 0.78,
+                          ),
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(
@@ -477,6 +494,27 @@ String? _currentCoverUrl;
   }
 
   Widget _buildFeaturedCard() {
+    // Use the first real Supabase track as the featured track.
+    final featuredTrack =
+        _tracks.isNotEmpty ? _tracks.first : null;
+
+    final title = featuredTrack != null
+        ? featuredTrack['title']?.toString() ??
+            'Nairobi After Dark'
+        : 'Nairobi After Dark';
+
+    final artist = featuredTrack != null
+        ? _getArtistName(featuredTrack)
+        : 'Dobaplay';
+
+    final audioUrl = featuredTrack != null
+        ? featuredTrack['audio_url']?.toString()
+        : null;
+
+    final coverUrl = featuredTrack != null
+        ? featuredTrack['cover_url']?.toString()
+        : null;
+
     return Container(
       height: 205,
       decoration: BoxDecoration(
@@ -516,7 +554,8 @@ String? _currentCoverUrl;
           Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -524,11 +563,14 @@ String? _currentCoverUrl;
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.35),
-                    borderRadius: BorderRadius.circular(20),
+                    color: Colors.black.withValues(
+                      alpha: 0.35,
+                    ),
+                    borderRadius:
+                        BorderRadius.circular(20),
                   ),
                   child: Text(
-                    'DOBAPP FEATURED',
+                    'DOBAPLAY FEATURED',
                     style: GoogleFonts.montserrat(
                       color: Colors.white,
                       fontSize: 9,
@@ -539,7 +581,9 @@ String? _currentCoverUrl;
                 ),
                 const Spacer(),
                 Text(
-                  'Nairobi After Dark',
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.montserrat(
                     color: Colors.white,
                     fontSize: 22,
@@ -548,7 +592,11 @@ String? _currentCoverUrl;
                 ),
                 const SizedBox(height: 5),
                 Text(
-                  'Late night sounds from the city.',
+                  audioUrl != null
+                      ? artist
+                      : 'Late night sounds from the city.',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.montserrat(
                     color: AppTheme.textSecondary,
                     fontSize: 11,
@@ -557,18 +605,20 @@ String? _currentCoverUrl;
                 const SizedBox(height: 14),
                 GestureDetector(
                   onTap: () {
-                    _playTrack(
-                      _migosTrackUrl,
-                      title: 'Bad and Boujee',
-                      artist: 'Migos',
-                      coverUrl:
-                          'https://uuvjbzhgwgunapwewami.supabase.co/storage/v1/object/public/covers/artworks-000179057945-14v79p-t500x500.jpg',
-                    );
+                    if (audioUrl != null &&
+                        audioUrl.isNotEmpty) {
+                      _playTrack(
+                        audioUrl,
+                        title: title,
+                        artist: artist,
+                        coverUrl: coverUrl,
+                      );
+                    }
                   },
                   child: Container(
                     width: 48,
                     height: 48,
-                    decoration: BoxDecoration(
+                    decoration: const BoxDecoration(
                       color: AppTheme.primary,
                       shape: BoxShape.circle,
                     ),
@@ -587,7 +637,10 @@ String? _currentCoverUrl;
     );
   }
 
-  Widget _buildSectionTitle(String title, String action) {
+  Widget _buildSectionTitle(
+    String title,
+    String action,
+  ) {
     return Row(
       children: [
         Expanded(
@@ -621,11 +674,14 @@ String? _currentCoverUrl;
     return SizedBox(
       height: 185,
       child: ListView.separated(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 20,
+        ),
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
         itemCount: songs.length,
-        separatorBuilder: (_, index) => const SizedBox(width: 14),
+        separatorBuilder: (_, index) =>
+            const SizedBox(width: 14),
         itemBuilder: (context, index) {
           final song = songs[index];
 
@@ -634,18 +690,22 @@ String? _currentCoverUrl;
             child: GestureDetector(
               onTap: () {},
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
                 children: [
                   Container(
                     width: 140,
                     height: 140,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius:
+                          BorderRadius.circular(20),
                       gradient: LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                         colors: [
-                          AppTheme.primary.withValues(alpha: 0.35),
+                          AppTheme.primary.withValues(
+                            alpha: 0.35,
+                          ),
                           const Color(0xFF15151D),
                         ],
                       ),
@@ -655,7 +715,9 @@ String? _currentCoverUrl;
                         Center(
                           child: Icon(
                             Icons.music_note_rounded,
-                            color: Colors.white.withValues(alpha: 0.75),
+                            color: Colors.white.withValues(
+                              alpha: 0.75,
+                            ),
                             size: 46,
                           ),
                         ),
@@ -666,7 +728,10 @@ String? _currentCoverUrl;
                             width: 34,
                             height: 34,
                             decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.75),
+                              color:
+                                  Colors.black.withValues(
+                                alpha: 0.75,
+                              ),
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(
@@ -725,10 +790,12 @@ String? _currentCoverUrl;
             width: 52,
             height: 52,
             decoration: BoxDecoration(
-              color: AppTheme.primary.withValues(alpha: 0.12),
+              color: AppTheme.primary.withValues(
+                alpha: 0.12,
+              ),
               shape: BoxShape.circle,
             ),
-            child: Icon(
+            child: const Icon(
               Icons.headphones_rounded,
               color: AppTheme.primary,
               size: 26,
@@ -737,7 +804,8 @@ String? _currentCoverUrl;
           const SizedBox(width: 15),
           Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
               children: [
                 Text(
                   'YOUR MUSIC. YOUR CITY.',
@@ -792,7 +860,8 @@ String? _currentCoverUrl;
             _currentIndex = index;
           });
         },
-        indicatorColor: AppTheme.primary.withValues(alpha: 0.14),
+        indicatorColor:
+            AppTheme.primary.withValues(alpha: 0.14),
         destinations: [
           for (final item in items)
             NavigationDestination(

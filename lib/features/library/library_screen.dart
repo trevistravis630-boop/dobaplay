@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/theme/app_theme.dart';
 
@@ -12,81 +13,57 @@ class LibraryScreen extends StatefulWidget {
 
 class _LibraryScreenState extends State<LibraryScreen>
     with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
+  late TabController _tabController;
 
-  final List<Map<String, String>> playlists = [
+  bool _isLoading = true;
+  String? _error;
+
+  List<Map<String, dynamic>> _albums = [];
+  List<Map<String, dynamic>> _artists = [];
+
+  final List<Map<String, dynamic>> _playlists = [
     {
       'title': 'My Mix',
       'subtitle': '432 songs',
+      'icon': Icons.favorite_rounded,
     },
     {
       'title': 'Nairobi Nights',
       'subtitle': '87 songs',
+      'icon': Icons.nightlight_round,
     },
     {
       'title': 'Afro Vibes',
       'subtitle': '120 songs',
+      'icon': Icons.music_note_rounded,
     },
     {
       'title': 'Kenyan Classics',
       'subtitle': '56 songs',
+      'icon': Icons.album_rounded,
     },
     {
       'title': 'Workout Mode',
       'subtitle': '78 songs',
+      'icon': Icons.fitness_center_rounded,
     },
     {
       'title': 'Chill & Relax',
       'subtitle': '64 songs',
+      'icon': Icons.spa_rounded,
     },
   ];
 
-  final List<Map<String, String>> albums = [
-    {
-      'title': 'Nairobi Nights',
-      'subtitle': 'Sauti Sol',
-    },
-    {
-      'title': 'Mwanamke',
-      'subtitle': 'Bensoul',
-    },
-    {
-      'title': 'Tingiza',
-      'subtitle': 'Khaligraph Jones',
-    },
-    {
-      'title': 'Eka',
-      'subtitle': 'Femi One',
-    },
-  ];
-
-  final List<Map<String, String>> artists = [
-    {
-      'title': 'Sauti Sol',
-      'subtitle': 'Kenyan Artist',
-    },
-    {
-      'title': 'Bensoul',
-      'subtitle': 'Kenyan Artist',
-    },
-    {
-      'title': 'Khaligraph Jones',
-      'subtitle': 'Kenyan Artist',
-    },
-    {
-      'title': 'Femi One',
-      'subtitle': 'Kenyan Artist',
-    },
-  ];
-
-  final List<Map<String, String>> downloaded = [
+  final List<Map<String, dynamic>> _downloaded = [
     {
       'title': 'Bad and Boujee',
-      'subtitle': 'Migos',
+      'artist': 'Migos',
+      'size': '6.8 MB',
     },
     {
       'title': 'Nairobi Nights',
-      'subtitle': 'Sauti Sol',
+      'artist': 'Kenyan Artist',
+      'size': '7.2 MB',
     },
   ];
 
@@ -99,17 +76,66 @@ class _LibraryScreenState extends State<LibraryScreen>
       vsync: this,
     );
 
-    _tabController.addListener(() {
-      if (mounted) {
-        setState(() {});
-      }
-    });
+    _loadLibrary();
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadLibrary() async {
+    try {
+      final supabase = Supabase.instance.client;
+
+      final albumsResponse = await supabase
+          .from('albums')
+          .select('''
+            id,
+            title,
+            cover_url,
+            artist_id,
+            artists (
+              id,
+              name,
+              image_url
+            )
+          ''')
+          .order('title');
+
+      final artistsResponse = await supabase
+          .from('artists')
+          .select('''
+            id,
+            name,
+            image_url,
+            bio
+          ''')
+          .order('name');
+
+      if (!mounted) return;
+
+      setState(() {
+        _albums = List<Map<String, dynamic>>.from(
+          albumsResponse,
+        );
+
+        _artists = List<Map<String, dynamic>>.from(
+          artistsResponse,
+        );
+
+        _isLoading = false;
+        _error = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _isLoading = false;
+        _error = error.toString();
+      });
+    }
   }
 
   @override
@@ -119,18 +145,20 @@ class _LibraryScreenState extends State<LibraryScreen>
       body: SafeArea(
         child: Column(
           children: [
-            _buildHeader(),
-            _buildTabs(),
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildPlaylistList(),
-                  _buildGrid(albums),
-                  _buildGrid(artists),
-                  _buildDownloadedList(),
-                ],
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                20,
+                20,
+                20,
+                0,
               ),
+              child: _buildHeader(),
+            ),
+            const SizedBox(height: 22),
+            _buildTabs(),
+            const SizedBox(height: 8),
+            Expanded(
+              child: _buildTabContent(),
             ),
           ],
         ),
@@ -139,273 +167,139 @@ class _LibraryScreenState extends State<LibraryScreen>
   }
 
   Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        20,
-        20,
-        16,
-        12,
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              'LIBRARY',
-              style: GoogleFonts.rubikWetPaint(
-                color: AppTheme.primary,
-                fontSize: 34,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          _iconButton(
-            Icons.settings_outlined,
-            () {},
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTabs() {
-    return SizedBox(
-      height: 48,
-      child: ListView(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 20,
-        ),
-        scrollDirection: Axis.horizontal,
-        children: [
-          _tab('Playlists', 0),
-          _tab('Albums', 1),
-          _tab('Artists', 2),
-          _tab('Downloaded', 3),
-        ],
-      ),
-    );
-  }
-
-  Widget _tab(String title, int index) {
-    final selected = _tabController.index == index;
-
-    return GestureDetector(
-      onTap: () {
-        _tabController.animateTo(index);
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        margin: const EdgeInsets.only(right: 9),
-        padding: const EdgeInsets.symmetric(
-          horizontal: 17,
-        ),
-        decoration: BoxDecoration(
-          color: selected
-              ? AppTheme.primary
-              : AppTheme.surface,
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(
-            color: selected
-                ? AppTheme.primary
-                : Colors.white.withValues(alpha: 0.06),
-          ),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          title,
-          style: GoogleFonts.montserrat(
-            color: selected
-                ? Colors.white
-                : AppTheme.textSecondary,
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPlaylistList() {
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(
-        20,
-        18,
-        20,
-        30,
-      ),
-      physics: const BouncingScrollPhysics(),
-      itemCount: playlists.length,
-      itemBuilder: (context, index) {
-        final item = playlists[index];
-
-        return _buildListTile(
-          title: item['title']!,
-          subtitle: item['subtitle']!,
-          icon: _playlistIcon(index),
-          trailing: const Icon(
-            Icons.more_vert_rounded,
-            color: AppTheme.textSecondary,
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildDownloadedList() {
-    if (downloaded.isEmpty) {
-      return _buildEmptyState(
-        Icons.download_rounded,
-        'No downloads yet',
-        'Your downloaded music will appear here.',
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(
-        20,
-        18,
-        20,
-        30,
-      ),
-      physics: const BouncingScrollPhysics(),
-      itemCount: downloaded.length,
-      itemBuilder: (context, index) {
-        final item = downloaded[index];
-
-        return _buildListTile(
-          title: item['title']!,
-          subtitle: item['subtitle']!,
-          icon: Icons.music_note_rounded,
-          trailing: const Icon(
-            Icons.check_rounded,
-            color: AppTheme.primary,
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildGrid(
-    List<Map<String, String>> items,
-  ) {
-    return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(
-        20,
-        18,
-        20,
-        30,
-      ),
-      physics: const BouncingScrollPhysics(),
-      itemCount: items.length,
-      gridDelegate:
-          const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 14,
-        mainAxisSpacing: 18,
-        childAspectRatio: 0.82,
-      ),
-      itemBuilder: (context, index) {
-        final item = items[index];
-
-        return _buildGridCard(
-          item['title']!,
-          item['subtitle']!,
-          index,
-        );
-      },
-    );
-  }
-
-  Widget _buildGridCard(
-    String title,
-    String subtitle,
-    int index,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
       children: [
         Expanded(
+          child: Text(
+            'YOUR LIBRARY',
+            style: GoogleFonts.rubikWetPaint(
+              color: AppTheme.primary,
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        InkWell(
+          onTap: _loadLibrary,
+          borderRadius: BorderRadius.circular(14),
           child: Container(
-            width: double.infinity,
+            width: 42,
+            height: 42,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  AppTheme.primary.withValues(alpha: 0.28),
-                  AppTheme.surface,
-                  const Color(0xFF101016),
-                ],
-              ),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.06),
-              ),
+              color: AppTheme.surface,
+              borderRadius: BorderRadius.circular(14),
             ),
-            child: Stack(
-              children: [
-                Positioned(
-                  right: -12,
-                  bottom: -12,
-                  child: Icon(
-                    index.isEven
-                        ? Icons.album_rounded
-                        : Icons.person_rounded,
-                    size: 90,
-                    color: AppTheme.primary.withValues(
-                      alpha: 0.08,
-                    ),
-                  ),
-                ),
-                Center(
-                  child: Icon(
-                    index.isEven
-                        ? Icons.album_rounded
-                        : Icons.person_rounded,
-                    color: AppTheme.primary,
-                    size: 42,
-                  ),
-                ),
-              ],
+            child: const Icon(
+              Icons.refresh_rounded,
+              color: Colors.white,
+              size: 21,
             ),
-          ),
-        ),
-        const SizedBox(height: 9),
-        Text(
-          title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: GoogleFonts.montserrat(
-            color: Colors.white,
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 3),
-        Text(
-          subtitle,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: GoogleFonts.montserrat(
-            color: AppTheme.textSecondary,
-            fontSize: 10,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildListTile({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required Widget trailing,
-  }) {
+  Widget _buildTabs() {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(9),
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      height: 42,
       decoration: BoxDecoration(
         color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(17),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: TabBar(
+        controller: _tabController,
+        isScrollable: true,
+        tabAlignment: TabAlignment.start,
+        dividerColor: Colors.transparent,
+        indicatorSize: TabBarIndicatorSize.tab,
+        indicator: BoxDecoration(
+          color: AppTheme.primary.withValues(
+            alpha: 0.16,
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        labelColor: AppTheme.primary,
+        unselectedLabelColor: AppTheme.textSecondary,
+        labelStyle: GoogleFonts.montserrat(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+        unselectedLabelStyle: GoogleFonts.montserrat(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+        ),
+        padding: const EdgeInsets.all(4),
+        tabs: const [
+          Tab(text: 'Playlists'),
+          Tab(text: 'Albums'),
+          Tab(text: 'Artists'),
+          Tab(text: 'Downloaded'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabContent() {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(
+          color: AppTheme.primary,
+        ),
+      );
+    }
+
+    if (_error != null) {
+      return _buildErrorState();
+    }
+
+    return TabBarView(
+      controller: _tabController,
+      children: [
+        _buildPlaylists(),
+        _buildAlbums(),
+        _buildArtists(),
+        _buildDownloaded(),
+      ],
+    );
+  }
+
+  Widget _buildPlaylists() {
+    return RefreshIndicator(
+      onRefresh: _loadLibrary,
+      color: AppTheme.primary,
+      backgroundColor: AppTheme.surface,
+      child: ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
+        padding: const EdgeInsets.fromLTRB(
+          20,
+          18,
+          20,
+          30,
+        ),
+        itemCount: _playlists.length,
+        separatorBuilder: (_, index) =>
+            const SizedBox(height: 10),
+        itemBuilder: (context, index) {
+          final playlist = _playlists[index];
+
+          return _buildPlaylistCard(playlist);
+        },
+      ),
+    );
+  }
+
+  Widget _buildPlaylistCard(
+    Map<String, dynamic> playlist,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: Colors.white.withValues(alpha: 0.05),
         ),
@@ -413,33 +307,28 @@ class _LibraryScreenState extends State<LibraryScreen>
       child: Row(
         children: [
           Container(
-            width: 58,
-            height: 58,
+            width: 62,
+            height: 62,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(13),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  AppTheme.primary.withValues(alpha: 0.32),
-                  const Color(0xFF15151D),
-                ],
+              color: AppTheme.primary.withValues(
+                alpha: 0.12,
               ),
+              borderRadius: BorderRadius.circular(15),
             ),
             child: Icon(
-              icon,
-              color: Colors.white.withValues(alpha: 0.85),
-              size: 27,
+              playlist['icon'] as IconData,
+              color: AppTheme.primary,
+              size: 28,
             ),
           ),
-          const SizedBox(width: 13),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment:
                   CrossAxisAlignment.start,
               children: [
                 Text(
-                  title,
+                  playlist['title'].toString(),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.montserrat(
@@ -450,9 +339,7 @@ class _LibraryScreenState extends State<LibraryScreen>
                 ),
                 const SizedBox(height: 5),
                 Text(
-                  subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  playlist['subtitle'].toString(),
                   style: GoogleFonts.montserrat(
                     color: AppTheme.textSecondary,
                     fontSize: 10,
@@ -461,7 +348,378 @@ class _LibraryScreenState extends State<LibraryScreen>
               ],
             ),
           ),
-          trailing,
+          const Icon(
+            Icons.chevron_right_rounded,
+            color: AppTheme.textSecondary,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAlbums() {
+    if (_albums.isEmpty) {
+      return _buildEmptyState(
+        Icons.album_rounded,
+        'No albums yet',
+        'Albums from Supabase will appear here.',
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadLibrary,
+      color: AppTheme.primary,
+      backgroundColor: AppTheme.surface,
+      child: GridView.builder(
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
+        padding: const EdgeInsets.fromLTRB(
+          20,
+          18,
+          20,
+          30,
+        ),
+        itemCount: _albums.length,
+        gridDelegate:
+            const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 14,
+          mainAxisSpacing: 18,
+          childAspectRatio: 0.72,
+        ),
+        itemBuilder: (context, index) {
+          return _buildAlbumCard(_albums[index]);
+        },
+      ),
+    );
+  }
+
+  Widget _buildAlbumCard(
+    Map<String, dynamic> album,
+  ) {
+    final title =
+        album['title']?.toString() ?? 'Unknown Album';
+
+    final coverUrl =
+        album['cover_url']?.toString();
+
+    final artistData = album['artists'];
+
+    final artist = artistData is Map
+        ? artistData['name']?.toString() ??
+            'Unknown Artist'
+        : 'Unknown Artist';
+
+    return GestureDetector(
+      onTap: () {},
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                color: AppTheme.surface,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: coverUrl != null &&
+                      coverUrl.isNotEmpty
+                  ? Image.network(
+                      coverUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder:
+                          (_, error, stackTrace) {
+                        return _artworkPlaceholder();
+                      },
+                    )
+                  : _artworkPlaceholder(),
+            ),
+          ),
+          const SizedBox(height: 9),
+          Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.montserrat(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            artist,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.montserrat(
+              color: AppTheme.textSecondary,
+              fontSize: 10,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildArtists() {
+    if (_artists.isEmpty) {
+      return _buildEmptyState(
+        Icons.person_rounded,
+        'No artists yet',
+        'Artists from Supabase will appear here.',
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadLibrary,
+      color: AppTheme.primary,
+      backgroundColor: AppTheme.surface,
+      child: GridView.builder(
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
+        padding: const EdgeInsets.fromLTRB(
+          20,
+          18,
+          20,
+          30,
+        ),
+        itemCount: _artists.length,
+        gridDelegate:
+            const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 14,
+          mainAxisSpacing: 18,
+          childAspectRatio: 0.86,
+        ),
+        itemBuilder: (context, index) {
+          return _buildArtistCard(_artists[index]);
+        },
+      ),
+    );
+  }
+
+  Widget _buildArtistCard(
+    Map<String, dynamic> artist,
+  ) {
+    final name =
+        artist['name']?.toString() ?? 'Unknown Artist';
+
+    final imageUrl =
+        artist['image_url']?.toString();
+
+    return GestureDetector(
+      onTap: () {},
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppTheme.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.05),
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            ClipOval(
+              child: SizedBox(
+                width: 92,
+                height: 92,
+                child: imageUrl != null &&
+                        imageUrl.isNotEmpty
+                    ? Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder:
+                            (_, error, stackTrace) {
+                          return _artistPlaceholder();
+                        },
+                      )
+                    : _artistPlaceholder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.montserrat(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Artist',
+              style: GoogleFonts.montserrat(
+                color: AppTheme.textSecondary,
+                fontSize: 9,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDownloaded() {
+    return ListView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(
+        20,
+        18,
+        20,
+        30,
+      ),
+      children: [
+        _buildStorageCard(),
+        const SizedBox(height: 22),
+        Text(
+          'Downloaded songs',
+          style: GoogleFonts.montserrat(
+            color: Colors.white,
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 12),
+        ..._downloaded.map(
+          (song) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _buildDownloadedCard(song),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStorageCard() {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: AppTheme.primary.withValues(alpha: 0.12),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withValues(
+                    alpha: 0.12,
+                  ),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.storage_rounded,
+                  color: AppTheme.primary,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Offline Storage',
+                  style: GoogleFonts.montserrat(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Text(
+                '84 MB / 1 GB',
+                style: GoogleFonts.montserrat(
+                  color: AppTheme.textSecondary,
+                  fontSize: 10,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 15),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: LinearProgressIndicator(
+              value: 0.08,
+              minHeight: 7,
+              backgroundColor:
+                  Colors.white.withValues(alpha: 0.07),
+              color: AppTheme.primary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDownloadedCard(
+    Map<String, dynamic> song,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(11),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(17),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceLight,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.music_note_rounded,
+              color: AppTheme.primary,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
+              children: [
+                Text(
+                  song['title'].toString(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.montserrat(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${song['artist']} • ${song['size']}',
+                  style: GoogleFonts.montserrat(
+                    color: AppTheme.textSecondary,
+                    fontSize: 9,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Icon(
+            Icons.check_circle_rounded,
+            color: AppTheme.primary,
+            size: 21,
+          ),
         ],
       ),
     );
@@ -470,18 +728,19 @@ class _LibraryScreenState extends State<LibraryScreen>
   Widget _buildEmptyState(
     IconData icon,
     String title,
-    String subtitle,
+    String message,
   ) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(30),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment:
+              MainAxisAlignment.center,
           children: [
             Icon(
               icon,
               color: AppTheme.primary,
-              size: 50,
+              size: 48,
             ),
             const SizedBox(height: 16),
             Text(
@@ -492,13 +751,14 @@ class _LibraryScreenState extends State<LibraryScreen>
                 fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(height: 7),
+            const SizedBox(height: 8),
             Text(
-              subtitle,
+              message,
               textAlign: TextAlign.center,
               style: GoogleFonts.montserrat(
                 color: AppTheme.textSecondary,
                 fontSize: 11,
+                height: 1.5,
               ),
             ),
           ],
@@ -507,41 +767,85 @@ class _LibraryScreenState extends State<LibraryScreen>
     );
   }
 
-  IconData _playlistIcon(int index) {
-    switch (index) {
-      case 0:
-        return Icons.favorite_rounded;
-      case 1:
-        return Icons.nightlife_rounded;
-      case 2:
-        return Icons.music_note_rounded;
-      case 3:
-        return Icons.library_music_rounded;
-      case 4:
-        return Icons.fitness_center_rounded;
-      default:
-        return Icons.self_improvement_rounded;
-    }
+  Widget _buildErrorState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(30),
+        child: Column(
+          mainAxisAlignment:
+              MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.cloud_off_rounded,
+              color: AppTheme.primary,
+              size: 48,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Could not load your library',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.montserrat(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Check your Supabase connection and try again.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.montserrat(
+                color: AppTheme.textSecondary,
+                fontSize: 11,
+              ),
+            ),
+            const SizedBox(height: 18),
+            ElevatedButton(
+              onPressed: _loadLibrary,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('TRY AGAIN'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
-  Widget _iconButton(
-    IconData icon,
-    VoidCallback onTap,
-  ) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(15),
-      child: Container(
-        width: 42,
-        height: 42,
-        decoration: BoxDecoration(
-          color: AppTheme.surface,
-          borderRadius: BorderRadius.circular(15),
+  Widget _artworkPlaceholder() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.primary.withValues(alpha: 0.30),
+            const Color(0xFF15151D),
+          ],
         ),
+      ),
+      child: Center(
         child: Icon(
-          icon,
-          color: Colors.white,
-          size: 21,
+          Icons.album_rounded,
+          color: Colors.white.withValues(alpha: 0.75),
+          size: 42,
+        ),
+      ),
+    );
+  }
+
+  Widget _artistPlaceholder() {
+    return Container(
+      color: AppTheme.surfaceLight,
+      child: Center(
+        child: Icon(
+          Icons.person_rounded,
+          color: AppTheme.primary.withValues(
+            alpha: 0.75,
+          ),
+          size: 42,
         ),
       ),
     );
